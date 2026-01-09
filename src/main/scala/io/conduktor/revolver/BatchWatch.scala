@@ -42,35 +42,53 @@ object BatchWatch {
     "src/test/scala", "src/test/java", "src/test/resources"
   )
 
-  def batchWatchCommand: Command = Command.command("reStartWatch") { initialState =>
+  /**
+   * Command that watches for file changes and restarts with debouncing.
+   * Usage: reStartWatch [project]
+   * Example: reStartWatch app
+   */
+  def batchWatchCommand: Command = Command.single("reStartWatch") { (initialState, projectArg) =>
     val extracted = Project.extract(initialState)
     val log = colorLogger(initialState.log)
-    val batchWindow = extracted.getOpt(RevolverPlugin.autoImport.reBatchWindow).getOrElse(3.seconds)
-    val baseDir = extracted.getOpt(baseDirectory).getOrElse(file("."))
+
+    // Switch to specified project if provided
+    val (state, projectPrefix) = if (projectArg.nonEmpty) {
+      val newState = Command.process(s"project $projectArg", initialState, _ => ())
+      (newState, s"$projectArg/")
+    } else {
+      (initialState, "")
+    }
+
+    val newExtracted = Project.extract(state)
+    val batchWindow = newExtracted.getOpt(RevolverPlugin.autoImport.reBatchWindow).getOrElse(3.seconds)
+    val baseDir = newExtracted.getOpt(baseDirectory).getOrElse(file("."))
 
     log.info(s"[CYAN]Starting batched watch mode (window: ${batchWindow.toSeconds}s)")
+    if (projectArg.nonEmpty) log.info(s"[CYAN]Project: $projectArg")
     log.info("[CYAN]Press 'q' + Enter to stop")
     println()
 
     val watcher = new FileWatcher(baseDir, log)
-    var state = Command.process("reStart", initialState, _ => ())
+    val reStartCmd = s"${projectPrefix}reStart"
+    var currentState = Command.process(reStartCmd, state, _ => ())
 
     try {
-      state = runWatchLoop(state, watcher, batchWindow, log)
+      currentState = runWatchLoop(currentState, watcher, batchWindow, log, reStartCmd)
     } finally {
       watcher.close()
       println()
       log.info("[CYAN]Batch watch stopped")
     }
 
-    state
+    currentState
   }
 
   private def runWatchLoop(
       initialState: State,
       watcher: FileWatcher,
       batchWindow: FiniteDuration,
-      log: Logger
+      log: Logger,
+      reStartCmd: String
   ): State = {
     var state = initialState
 
@@ -79,7 +97,7 @@ object BatchWatch {
 
       watcher.checkForRestart(batchWindow).foreach { files =>
         logChangedFiles(log, files)
-        state = Command.process("reStart", state, _ => ())
+        state = Command.process(reStartCmd, state, _ => ())
         println()
       }
 

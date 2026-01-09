@@ -43,7 +43,8 @@ Watches for source changes and automatically restarts. Press Enter to stop watch
 When using tools like **Claude Code** that make multiple rapid file changes, `~reStart` triggers unnecessary restarts. Use `reStartWatch` instead:
 
 ```
-sbt> reStartWatch
+sbt> reStartWatch          # Watch current project
+sbt> reStartWatch app      # Watch specific project (multi-module builds)
 ```
 
 This waits for the batch window (default: 3s) after the **last** file change before restarting.
