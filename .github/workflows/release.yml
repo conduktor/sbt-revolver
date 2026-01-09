@@ -8,6 +8,9 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,18 +23,10 @@ jobs:
           java-version: 17
           cache: sbt
 
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.PGP_SECRET }}
-          passphrase: ${{ secrets.PGP_PASSPHRASE }}
-
-      - name: Publish to Sonatype
+      - name: Publish to GitHub Packages
         env:
-          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
-          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
-          PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
-        run: sbt ci-release
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: sbt publish
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1

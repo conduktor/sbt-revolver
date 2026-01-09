@@ -19,6 +19,14 @@ developers := List(
   Developer("sirthias", "Mathias Doenitz", "", url("https://github.com/sirthias"))
 )
 
-// sbt-ci-release settings
-ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
+// GitHub Packages
+publishTo := Some("GitHub Packages" at "https://maven.pkg.github.com/conduktor/sbt-revolver")
+publishMavenStyle := true
+credentials += Credentials(
+  "GitHub Package Registry",
+  "maven.pkg.github.com",
+  "conduktor",
+  sys.env.getOrElse("GITHUB_TOKEN", "")
+)
+
 ThisBuild / versionScheme := Some("early-semver")
