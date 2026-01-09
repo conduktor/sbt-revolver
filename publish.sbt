@@ -1,45 +1,24 @@
 name := "sbt-revolver"
-
 organization := "io.conduktor"
-
-description := "An SBT plugin for dangerously fast development turnaround in Scala (Conduktor fork with batch restart support)"
+description := "SBT plugin for fast development turnaround in Scala (Conduktor fork with batch restart)"
 
 startYear := Some(2011)
-
 homepage := Some(url("https://github.com/conduktor/sbt-revolver"))
-
-organizationHomepage := Some(url("https://conduktor.io"))
-
-licenses += "Apache License 2.0" -> url("https://github.com/conduktor/sbt-revolver/raw/master/LICENSE")
-
-publishTo := {
-  val nexus = "https://oss.sonatype.org/"
-  Some {
-    if (version.value.trim.contains("+")) "snapshots" at nexus + "content/repositories/snapshots"
-    else                                  "releases"  at nexus + "service/local/staging/deploy/maven2"
-  }
-}
-
-publishMavenStyle := true
-Test / publishArtifact := false
-pomIncludeRepository := { _ => false }
+licenses := Seq("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0"))
 
 scmInfo := Some(
   ScmInfo(
-    browseUrl = url("https://github.com/conduktor/sbt-revolver"),
-    connection = "scm:git:git@github.com:conduktor/sbt-revolver.git"
+    url("https://github.com/conduktor/sbt-revolver"),
+    "scm:git:git@github.com:conduktor/sbt-revolver.git"
   )
 )
 
 developers := List(
-  Developer(
-    "conduktor",
-    "Conduktor",
-    "dev@conduktor.io",
-    url("https://github.com/conduktor")),
-  Developer(
-    "sbt-revolver-contributors",
-    "Sbt Revolver Contributors",
-    "",
-    url("https://github.com/spray/sbt-revolver/graphs/contributors"))
+  Developer("conduktor", "Conduktor", "dev@conduktor.io", url("https://conduktor.io")),
+  Developer("jrudolph", "Johannes Rudolph", "", url("https://github.com/jrudolph")),
+  Developer("sirthias", "Mathias Doenitz", "", url("https://github.com/sirthias"))
 )
+
+// sbt-ci-release settings
+ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
+ThisBuild / versionScheme := Some("early-semver")
