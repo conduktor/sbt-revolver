@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2009-2012 Johannes Rudolph and Mathias Doenitz
+ * Copyright (C) 2024 Conduktor
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,60 +17,50 @@
 
 package io.conduktor.revolver
 
-import java.lang.{Runtime => JRuntime}
 import sbt.{Logger, ProjectRef}
 
+import java.lang.{Runtime => JRuntime}
 import scala.sys.process.Process
 
-/**
- * A token which we put into the SBT state to hold the Process of an application running in the background.
- */
+/** Token stored in SBT state to hold the Process of a background application. */
 case class AppProcess(projectRef: ProjectRef, consoleColor: String, log: Logger)(process: Process) {
-  val shutdownHook = createShutdownHook("... killing ...")
 
-  def createShutdownHook(msg: => String) =
-    new Thread(new Runnable {
-      def run() {
-        if (isRunning) {
-          log.info(msg)
-          process.destroy()
-        }
-      }
-    })
+  @volatile private var finishState: Option[Int] = None
 
-  @volatile var finishState: Option[Int] = None
+  private val shutdownHook: Thread = new Thread(() => {
+    if (isRunning) {
+      log.info("... killing ...")
+      process.destroy()
+    }
+  })
 
-  val watchThread = {
-    val thread = new Thread(new Runnable {
-      def run() {
-        val code = process.exitValue()
-        finishState = Some(code)
-        log.info("... finished with exit code %d" format code)
-        unregisterShutdownHook()
-        Actions.unregisterAppProcess(projectRef)
-      }
+  private val watchThread: Thread = {
+    val thread = new Thread(() => {
+      val code = process.exitValue()
+      finishState = Some(code)
+      log.info(s"... finished with exit code $code")
+      unregisterShutdownHook()
+      Actions.unregisterAppProcess(projectRef)
     })
     thread.start()
     thread
   }
-  def projectName: String = projectRef.project
 
   registerShutdownHook()
 
-  def stop() {
+  def projectName: String = projectRef.project
+
+  def isRunning: Boolean = finishState.isEmpty
+
+  def stop(): Unit = {
     unregisterShutdownHook()
     process.destroy()
     process.exitValue()
   }
 
-  def registerShutdownHook() {
+  private def registerShutdownHook(): Unit =
     JRuntime.getRuntime.addShutdownHook(shutdownHook)
-  }
 
-  def unregisterShutdownHook() {
+  private def unregisterShutdownHook(): Unit =
     JRuntime.getRuntime.removeShutdownHook(shutdownHook)
-  }
-
-  def isRunning: Boolean =
-    finishState.isEmpty
 }
