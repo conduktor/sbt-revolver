@@ -34,7 +34,8 @@ case class AppProcess(projectRef: ProjectRef, consoleColor: String, log: Logger)
     }
   })
 
-  private val watchThread: Thread = {
+  // Start background thread to monitor process exit
+  locally {
     val thread = new Thread(() => {
       val code = process.exitValue()
       finishState = Some(code)
@@ -43,7 +44,6 @@ case class AppProcess(projectRef: ProjectRef, consoleColor: String, log: Logger)
       Actions.unregisterAppProcess(projectRef)
     })
     thread.start()
-    thread
   }
 
   registerShutdownHook()

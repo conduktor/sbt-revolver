@@ -19,7 +19,6 @@ package io.conduktor.revolver
 
 import sbt._
 
-import java.util.regex.Pattern
 import scala.Console._
 
 object Utilities {
