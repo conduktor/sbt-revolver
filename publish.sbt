@@ -1,16 +1,16 @@
 name := "sbt-revolver"
 
-organization := "io.spray"
+organization := "io.conduktor"
 
-description := "An SBT plugin for dangerously fast development turnaround in Scala"
+description := "An SBT plugin for dangerously fast development turnaround in Scala (Conduktor fork with batch restart support)"
 
 startYear := Some(2011)
 
-homepage := Some(url("http://github.com/spray/sbt-revolver"))
+homepage := Some(url("https://github.com/conduktor/sbt-revolver"))
 
-organizationHomepage := Some(url("http://spray.io"))
+organizationHomepage := Some(url("https://conduktor.io"))
 
-licenses += "Apache License 2.0" -> url("https://github.com/spray/sbt-revolver/raw/master/LICENSE")
+licenses += "Apache License 2.0" -> url("https://github.com/conduktor/sbt-revolver/raw/master/LICENSE")
 
 publishTo := {
   val nexus = "https://oss.sonatype.org/"
@@ -26,12 +26,17 @@ pomIncludeRepository := { _ => false }
 
 scmInfo := Some(
   ScmInfo(
-    browseUrl = url("https://github.com/spray/sbt-revolver"),
-    connection = "scm:git:git@github.com:spray/sbt-revolver.git"
+    browseUrl = url("https://github.com/conduktor/sbt-revolver"),
+    connection = "scm:git:git@github.com:conduktor/sbt-revolver.git"
   )
 )
 
 developers := List(
+  Developer(
+    "conduktor",
+    "Conduktor",
+    "dev@conduktor.io",
+    url("https://github.com/conduktor")),
   Developer(
     "sbt-revolver-contributors",
     "Sbt Revolver Contributors",

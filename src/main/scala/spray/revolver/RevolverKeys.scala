@@ -18,6 +18,8 @@ package spray.revolver
 
 import sbt._
 
+import scala.concurrent.duration._
+
 trait RevolverKeys {
 
   val reStart = InputKey[AppProcess]("re-start", "Starts the application in a forked JVM (in the background). " +
@@ -44,5 +46,9 @@ trait RevolverKeys {
   val reLogTag = reLogTagUnscoped in reStart
 
   val debugSettings = SettingKey[Option[DebugSettings]]("debug-settings", "Settings for enabling remote JDWP debugging.")
+
+  // Batch restart settings (Conduktor addition)
+  val reBatchWindow = SettingKey[FiniteDuration]("re-batch-window",
+    "Time to wait after last file change before triggering restart. Useful when tools like Claude Code make multiple rapid changes. Default: 3 seconds")
 
 }

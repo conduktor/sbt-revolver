@@ -20,6 +20,9 @@ import sbt._
 import sbt.Keys._
 import Actions._
 import Utilities._
+
+import scala.concurrent.duration._
+
 object RevolverPlugin extends AutoPlugin {
 
     object autoImport extends RevolverKeys {
@@ -109,6 +112,10 @@ object RevolverPlugin extends AutoPlugin {
     override def requires = sbt.plugins.JvmPlugin
     override def trigger  = allRequirements
     override def projectSettings = settings
+    override def globalSettings = Seq(
+      reBatchWindow := 3.seconds,
+      commands += BatchWatch.batchWatchCommand
+    )
 
   /**
    * Changes javaOptions by using transformer function

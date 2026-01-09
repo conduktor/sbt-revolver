@@ -1,9 +1,12 @@
 _sbt-revolver_ is a plugin for [SBT] enabling a super-fast development turnaround for your Scala applications.
 
+**This is a [Conduktor](https://conduktor.io) fork** with additional features for AI-assisted development workflows.
+
 It sports the following features:
 
 * Starting and stopping your application in the background of your interactive SBT shell (in a forked JVM)
 * Triggered restart: automatically restart your application as soon as some of its sources have been changed
+* **Batched restart** (Conduktor addition): debounced watch mode that waits for file changes to settle before restarting — ideal for tools like Claude Code that make multiple rapid changes
 
 Even though _sbt-revolver_ works great with [spray] on [spray-can] there is nothing _spray_-specific to it. It can
 be used with any Scala application as long as there is some object with a `main` method.
@@ -14,8 +17,10 @@ be used with any Scala application as long as there is some object with a `main`
 _sbt-revolver_ requires [SBT] 1.x or greater. Add the following dependency to your `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.spray" % "sbt-revolver" % "0.10.0")
+addSbtPlugin("io.conduktor" % "sbt-revolver" % "0.11.0")
 ```
+
+For the original upstream version, use `io.spray` instead.
 
 sbt-revolver is an auto plugin, so you don't need any additional configuration in your build.sbt nor in Build.scala
 to make it work. In multi-module builds it will be enabled for each module. To disable sbt-revolver for some submodules use `Project(...).disablePlugins(RevolverPlugin)` in your build file.
@@ -46,6 +51,34 @@ When you press &lt;ENTER&gt; SBT leaves "triggered restart" and returns to the n
 
 To customize which files should be watched for triggered restart see the sbt documentation about [Triggered Execution](http://www.scala-sbt.org/0.13/docs/Triggered-Execution.html).
 
+#### Batched Restart (Conduktor addition)
+
+When using tools like **Claude Code** or IDEs that make multiple rapid file changes, `~reStart` can trigger many unnecessary restarts. The `reStartWatch` command solves this with a debounced watch mode:
+
+```
+sbt> reStartWatch
+```
+
+This starts your application and watches for changes, but waits for the configured batch window (default: 3 seconds) after the **last** file change before triggering a restart.
+
+**Example workflow with Claude Code:**
+```
+Claude modifies file A → timer starts (3s)
+Claude modifies file B → timer resets (3s)
+Claude modifies file C → timer resets (3s)
+Claude is done         → 3s pass → single restart
+```
+
+Configure the batch window in your `build.sbt`:
+
+```scala
+import scala.concurrent.duration._
+
+reBatchWindow := 5.seconds  // wait 5s after last change (default: 3s)
+```
+
+Press `q` + Enter to stop the batched watch mode.
+
 ## Configuration
 
 The following SBT settings defined by _sbt-revolver_ are of potential interest:
@@ -69,6 +102,8 @@ The following SBT settings defined by _sbt-revolver_ are of potential interest:
   project name.
 * `debugSettings`, a `SettingKey[Option[DebugSettings]]` to specify remote debugger settings. There's a convenience
   helper `Revolver.enableDebugging` to simplify to enable debugging (see examples).
+* `reBatchWindow`, a `SettingKey[FiniteDuration]` (Conduktor addition), which sets the debounce window for `reStartWatch`.
+  Default is 3 seconds.
 
 Examples:
 
