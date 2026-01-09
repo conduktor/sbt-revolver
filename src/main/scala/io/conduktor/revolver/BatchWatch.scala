@@ -25,26 +25,26 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 /**
- * Batch watch implementation for sbt-revolver.
+ * Debounced file watcher for sbt-revolver.
  *
- * Provides a debounced watch mode that waits for file changes to settle
- * before triggering a restart. Useful when tools like Claude Code or IDEs
- * make multiple rapid file changes.
- *
- * Usage: reStartWatch
- *
- * Configure with:
- *   reBatchWindow := 5.seconds   // wait time after last change (default: 3s)
+ * Waits for file changes to settle before triggering restart.
+ * Ideal for tools like Claude Code that make rapid successive changes.
  */
 object BatchWatch {
   import Utilities._
 
+  private val WatchedExtensions = Set(".scala", ".java", ".conf", ".properties")
+  private val SourcePaths = Seq(
+    "src/main/scala", "src/main/java", "src/main/resources",
+    "src/test/scala", "src/test/java", "src/test/resources"
+  )
+
   def batchWatchCommand: Command = Command.command("reStartWatch") { initialState =>
     val extracted = Project.extract(initialState)
     val log = colorLogger(initialState.log)
-
     val batchWindow = extracted.getOpt(RevolverPlugin.autoImport.reBatchWindow).getOrElse(3.seconds)
     val baseDir = extracted.getOpt(baseDirectory).getOrElse(file("."))
 
@@ -52,18 +52,86 @@ object BatchWatch {
     log.info("[CYAN]Press 'q' + Enter to stop")
     println()
 
-    // Run initial reStart
+    val watcher = new FileWatcher(baseDir, log)
     var state = Command.process("reStart", initialState, _ => ())
 
-    val running = new AtomicBoolean(true)
-    val lastChangeTime = new AtomicLong(0L)
-    val changedFiles = new AtomicReference[Set[String]](Set.empty)
+    try {
+      state = runWatchLoop(state, watcher, batchWindow, log)
+    } finally {
+      watcher.close()
+      println()
+      log.info("[CYAN]Batch watch stopped")
+    }
 
-    // Setup file watcher
-    val watchService = FileSystems.getDefault.newWatchService()
-    val registeredDirs = mutable.Set[Path]()
+    state
+  }
 
-    def registerDirectory(dir: File): Unit = {
+  private def runWatchLoop(
+      initialState: State,
+      watcher: FileWatcher,
+      batchWindow: FiniteDuration,
+      log: Logger
+  ): State = {
+    var state = initialState
+
+    while (watcher.isRunning) {
+      Thread.sleep(100)
+
+      watcher.checkForRestart(batchWindow).foreach { files =>
+        logChangedFiles(log, files)
+        state = Command.process("reStart", state, _ => ())
+        println()
+      }
+
+      checkForQuit(watcher)
+    }
+
+    state
+  }
+
+  private def logChangedFiles(log: Logger, files: Set[String]): Unit = {
+    println()
+    log.info(s"[YELLOW]Restarting: ${files.size} file(s) changed")
+    files.take(5).foreach(f => log.info(s"[CYAN]  - $f"))
+    if (files.size > 5) log.info(s"[CYAN]  ... and ${files.size - 5} more")
+  }
+
+  private def checkForQuit(watcher: FileWatcher): Unit = {
+    if (System.in.available() > 0) {
+      val c = System.in.read()
+      if (c == 'q' || c == 'Q') watcher.stop()
+    }
+  }
+
+  /** Encapsulates file watching state and logic */
+  private class FileWatcher(baseDir: File, log: Logger) {
+    private val running = new AtomicBoolean(true)
+    private val lastChangeTime = new AtomicLong(0L)
+    private val changedFiles = new AtomicReference[Set[String]](Set.empty)
+    private val watchService = FileSystems.getDefault.newWatchService()
+    private val registeredDirs = mutable.Set[Path]()
+
+    // Register source directories and start watch thread
+    SourcePaths.map(baseDir / _).filter(_.exists()).foreach(registerDirectory)
+    startWatchThread()
+
+    def isRunning: Boolean = running.get()
+    def stop(): Unit = running.set(false)
+    def close(): Unit = {
+      running.set(false)
+      watchService.close()
+    }
+
+    def checkForRestart(batchWindow: FiniteDuration): Option[Set[String]] = {
+      val lastChange = lastChangeTime.get()
+      if (lastChange > 0 && System.currentTimeMillis() - lastChange >= batchWindow.toMillis) {
+        val files = changedFiles.getAndSet(Set.empty)
+        lastChangeTime.set(0L)
+        Some(files)
+      } else None
+    }
+
+    private def registerDirectory(dir: File): Unit = {
       if (dir.isDirectory && !registeredDirs.contains(dir.toPath)) {
         try {
           dir.toPath.register(watchService, ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE)
@@ -75,97 +143,46 @@ object BatchWatch {
       }
     }
 
-    // Register source directories
-    Seq("src/main/scala", "src/main/java", "src/main/resources",
-        "src/test/scala", "src/test/java", "src/test/resources")
-      .map(baseDir / _)
-      .filter(_.exists())
-      .foreach(registerDirectory)
-
-    // File watch thread
-    val watchThread = new Thread(() => {
-      while (running.get()) {
-        try {
-          val key = watchService.poll(200, TimeUnit.MILLISECONDS)
-          if (key != null) {
-            import scala.jdk.CollectionConverters._
-            val events = key.pollEvents().asScala
-
-            val relevantChanges = events.filter { event =>
-              val name = event.context().toString
-              name.endsWith(".scala") || name.endsWith(".java") ||
-              name.endsWith(".conf") || name.endsWith(".properties")
-            }
-
-            if (relevantChanges.nonEmpty) {
-              val now = System.currentTimeMillis()
-              val newFiles = relevantChanges.map(_.context().toString).toSet
-
-              lastChangeTime.set(now)
-              changedFiles.updateAndGet(_ ++ newFiles)
-
-              val totalFiles = changedFiles.get().size
-              print(s"\r[revolver] ${totalFiles} file(s) changed, waiting ${batchWindow.toSeconds}s...          ")
-            }
-
-            key.reset()
-
-            // Register any new directories
-            events.filter(_.kind() == ENTRY_CREATE).foreach { event =>
-              val dir = key.watchable().asInstanceOf[Path].resolve(event.context().asInstanceOf[Path]).toFile
-              if (dir.isDirectory) registerDirectory(dir)
-            }
-          }
-        } catch {
-          case _: InterruptedException => // normal shutdown
-          case e: Exception =>
-            if (running.get()) log.warn(s"Watch error: ${e.getMessage}")
-        }
-      }
-    }, "revolver-batch-watcher")
-    watchThread.setDaemon(true)
-    watchThread.start()
-
-    // Main loop
-    try {
-      while (running.get()) {
-        Thread.sleep(100)
-
-        val lastChange = lastChangeTime.get()
-        if (lastChange > 0) {
-          val timeSinceLastChange = System.currentTimeMillis() - lastChange
-
-          if (timeSinceLastChange >= batchWindow.toMillis) {
-            val files = changedFiles.getAndSet(Set.empty)
-            lastChangeTime.set(0L)
-
-            println()
-            log.info(s"[YELLOW]Restarting: ${files.size} file(s) changed")
-            files.take(5).foreach(f => log.info(s"[CYAN]  - $f"))
-            if (files.size > 5) log.info(s"[CYAN]  ... and ${files.size - 5} more")
-
-            state = Command.process("reStart", state, _ => ())
-            println()
+    private def startWatchThread(): Unit = {
+      val thread = new Thread(() => {
+        while (running.get()) {
+          try {
+            pollForChanges()
+          } catch {
+            case _: InterruptedException => // shutdown
+            case e: Exception => if (running.get()) log.warn(s"Watch error: ${e.getMessage}")
           }
         }
-
-        // Check for quit command
-        if (System.in.available() > 0) {
-          val c = System.in.read()
-          if (c == 'q' || c == 'Q') {
-            running.set(false)
-          }
-        }
-      }
-    } catch {
-      case _: InterruptedException => // normal shutdown
-    } finally {
-      running.set(false)
-      watchService.close()
-      println()
-      log.info("[CYAN]Batch watch stopped")
+      }, "revolver-batch-watcher")
+      thread.setDaemon(true)
+      thread.start()
     }
 
-    state
+    private def pollForChanges(): Unit = {
+      val key = watchService.poll(200, TimeUnit.MILLISECONDS)
+      if (key != null) {
+        val events = key.pollEvents().asScala
+
+        val relevantChanges = events.filter { event =>
+          val name = event.context().toString
+          WatchedExtensions.exists(name.endsWith)
+        }
+
+        if (relevantChanges.nonEmpty) {
+          lastChangeTime.set(System.currentTimeMillis())
+          changedFiles.updateAndGet(_ ++ relevantChanges.map(_.context().toString).toSet)
+          val total = changedFiles.get().size
+          print(s"\r[revolver] $total file(s) changed, waiting...          ")
+        }
+
+        key.reset()
+
+        // Register new directories
+        events.filter(_.kind() == ENTRY_CREATE).foreach { event =>
+          val dir = key.watchable().asInstanceOf[Path].resolve(event.context().asInstanceOf[Path]).toFile
+          if (dir.isDirectory) registerDirectory(dir)
+        }
+      }
+    }
   }
 }
