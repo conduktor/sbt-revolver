@@ -52,7 +52,7 @@ object Utilities {
   }
 
   def colorize(message: String): String =
-    ansiTagMapping.foldLeft(message) { (msg, mapping) =>
-      msg.replace(mapping._1, mapping._2)
+    ansiTagMapping.foldLeft(message) { case (msg, (tag, code)) =>
+      msg.replace(tag, code)
     }
 }

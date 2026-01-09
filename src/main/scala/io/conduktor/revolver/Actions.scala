@@ -99,8 +99,7 @@ object Actions {
 
   def registerAppProcess(project: ProjectRef, process: AppProcess): Unit =
     updateState { state =>
-      val oldProcess = state.getProcess(project)
-      if (oldProcess.exists(_.isRunning)) oldProcess.get.stop()
+      state.getProcess(project).filter(_.isRunning).foreach(_.stop())
       state.addProcess(project, process)
     }
 
@@ -116,9 +115,9 @@ object Actions {
     (token(Space) ~> and(token(NotSpace, "<args>"), not("---", "Excluded."))).* <~ SpaceClass.*
 
   /** Parser for: <arg1> <arg2> ... --- <jvmArg1> <jvmArg2> ... */
-  val startArgsParser: State => complete.Parser[ExtraCmdLineOptions] = { (_: State) =>
+  val startArgsParser: State => complete.Parser[ExtraCmdLineOptions] = { _ =>
     (spaceDelimitedWithoutDashes ~ (SpaceClass.* ~ "---" ~ SpaceClass.* ~> spaceDelimited("<jvm-args>")).?) map {
-      case (a, b) => ExtraCmdLineOptions(b.getOrElse(Nil), a)
+      case (args, jvmArgs) => ExtraCmdLineOptions(jvmArgs.getOrElse(Nil), args)
     }
   }
 

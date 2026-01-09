@@ -31,11 +31,11 @@ class SysoutLogger(appName: String, color: String) extends Logger {
     println(Utilities.colorize(s"$color$appName[RESET] success: ") + message)
 
   def log(level: Level.Value, message: => String): Unit = {
-    val levelStr = level match {
-      case Level.Info  => ""
-      case Level.Error => "[ERROR]"
-      case other       => other.toString
+    val prefix = level match {
+      case Level.Info  => s"$color$appName[RESET] "
+      case Level.Error => s"$color$appName[RESET] [RED][ERROR][RESET] "
+      case other       => s"$color$appName[RESET] [$other] "
     }
-    println(Utilities.colorize(s"$color$appName[RESET]$levelStr ") + message)
+    println(Utilities.colorize(prefix) + message)
   }
 }
