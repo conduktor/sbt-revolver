@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2009-2012 Johannes Rudolph and Mathias Doenitz
+ * Copyright (C) 2024 Conduktor
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,52 +18,42 @@
 package spray.revolver
 
 import sbt._
+
+import java.util.regex.Pattern
 import scala.Console._
 
 object Utilities {
+
   def colorLogger(state: State): Logger = colorLogger(state.log)
 
   def colorLogger(logger: Logger): Logger = new Logger {
-    def trace(t: => Throwable) { logger.trace(t) }
-    def success(message: => String) { success(message) }
+    def trace(t: => Throwable): Unit = logger.trace(t)
+    def success(message: => String): Unit = logger.success(message)
     def log(level: Level.Value, message: => String): Unit =
-      logger.log(level, colorize(logger.ansiCodesSupported, message))
+      logger.log(level, colorize(message))
   }
 
-  val simpleColors =
-    Seq(
-      "RED" -> RED,
-      "GREEN" -> GREEN,
-      "YELLOW" -> YELLOW,
-      "BLUE" -> BLUE,
-      "MAGENTA" -> MAGENTA,
-      "CYAN" -> CYAN,
-      "WHITE" -> WHITE
-    )
-  val rgbColors = (0 to 255) map rgb
-  val ansiTagMapping: Seq[(String, String)] =
-    (
-      Seq(
-        "BOLD" -> BOLD,
-        "RESET" -> RESET
-      ) ++
-      simpleColors ++
-      simpleColors.map(reversed) ++
-      simpleColors.map(underlined) ++
-      rgbColors
-    ).map(delimited("[", "]"))
+  private val simpleColors = Seq(
+    "RED" -> RED,
+    "GREEN" -> GREEN,
+    "YELLOW" -> YELLOW,
+    "BLUE" -> BLUE,
+    "MAGENTA" -> MAGENTA,
+    "CYAN" -> CYAN,
+    "WHITE" -> WHITE
+  )
 
-  def reversed(color: (String, String)): (String, String) =
-    ("~"+color._1) -> (color._2+REVERSED)
-  def underlined(color: (String, String)): (String, String) =
-    ("_"+color._1) -> (color._2+UNDERLINED)
-  def delimited(before: String, after: String)(mapping: (String, String)): (String, String) =
-    (before+mapping._1+after, mapping._2)
-  def rgb(idx: Int): (String, String) = ("RGB"+idx, "\u001b[38;5;"+idx+"m")
+  private val ansiTagMapping: Seq[(String, String)] = {
+    val base = Seq("BOLD" -> BOLD, "RESET" -> RESET)
+    val reversed = simpleColors.map { case (name, code) => s"~$name" -> s"$code$REVERSED" }
+    val underlined = simpleColors.map { case (name, code) => s"_$name" -> s"$code$UNDERLINED" }
 
-  def replaceAll(message: String, replacer: String => String) =
-    ansiTagMapping.foldLeft(message)((msg, tag) => msg.replaceAll(java.util.regex.Pattern.quote(tag._1), replacer(tag._2)))
+    (base ++ simpleColors ++ reversed ++ underlined)
+      .map { case (name, code) => s"[$name]" -> code }
+  }
 
-  def colorize(ansiCodesSupported: Boolean, message: String): String =
-    replaceAll(message, if (ansiCodesSupported) identity else _ => "")
+  def colorize(message: String): String =
+    ansiTagMapping.foldLeft(message) { (msg, mapping) =>
+      msg.replace(mapping._1, mapping._2)
+    }
 }

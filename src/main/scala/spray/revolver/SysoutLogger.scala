@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2009-2012 Johannes Rudolph and Mathias Doenitz
+ * Copyright (C) 2024 Conduktor
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,28 +19,23 @@ package spray.revolver
 
 import sbt._
 
-/**
- * A logger which logs directly with println to be used in situations where no streams are available
- */
-class SysoutLogger(appName: String, color: String, ansiCodesSupported: Boolean = false) extends Logger {
+/** Logger that writes directly to stdout, for use when streams are unavailable */
+class SysoutLogger(appName: String, color: String) extends Logger {
 
-  def trace(t: => Throwable) {
+  def trace(t: => Throwable): Unit = {
     t.printStackTrace()
     println(t)
   }
 
-  def success(message: => String) {
-    println(Utilities.colorize(ansiCodesSupported, "%s%s[RESET] success: " format (color, appName)) + message)
-  }
+  def success(message: => String): Unit =
+    println(Utilities.colorize(s"$color$appName[RESET] success: ") + message)
 
-  def log(level: Level.Value, message: => String) {
+  def log(level: Level.Value, message: => String): Unit = {
     val levelStr = level match {
-      case Level.Info => ""
+      case Level.Info  => ""
       case Level.Error => "[ERROR]"
-      case x@_ => x.toString
+      case other       => other.toString
     }
-    println(Utilities.colorize(ansiCodesSupported, "%s%s[RESET]%s " format (color, appName, levelStr)) + message)
+    println(Utilities.colorize(s"$color$appName[RESET]$levelStr ") + message)
   }
 }
-
-object SysoutLogger extends SysoutLogger("app", "[BOLD]", false)

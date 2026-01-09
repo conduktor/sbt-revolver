@@ -53,7 +53,7 @@ object BatchWatch {
     println()
 
     // Run initial reStart
-    var state = Command.process("reStart", initialState)
+    var state = Command.process("reStart", initialState, _ => ())
 
     val running = new AtomicBoolean(true)
     val lastChangeTime = new AtomicLong(0L)
@@ -144,7 +144,7 @@ object BatchWatch {
             files.take(5).foreach(f => log.info(s"[CYAN]  - $f"))
             if (files.size > 5) log.info(s"[CYAN]  ... and ${files.size - 5} more")
 
-            state = Command.process("reStart", state)
+            state = Command.process("reStart", state, _ => ())
             println()
           }
         }

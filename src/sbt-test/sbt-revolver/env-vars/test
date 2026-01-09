@@ -1,4 +1,0 @@
-> reStart
-$ sleep 2000
-$ exec curl http://0.0.0.0:8888
-> reStop
