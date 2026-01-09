@@ -46,12 +46,18 @@ object BatchWatch {
    * Command that watches for file changes and restarts with debouncing.
    * Usage: reStartWatch [project]
    * Example: reStartWatch app
+   *
+   * Watches all source directories in the build (not just the target project)
+   * so changes to dependencies also trigger restarts.
    */
   def batchWatchCommand: Command = Command.single("reStartWatch") { (initialState, projectArg) =>
     val extracted = Project.extract(initialState)
     val log = colorLogger(initialState.log)
 
-    // Switch to specified project if provided
+    // Get build root for watching all sources
+    val buildRoot = extracted.get(LocalRootProject / baseDirectory)
+
+    // Switch to specified project if provided (for reStart command)
     val (state, projectPrefix) = if (projectArg.nonEmpty) {
       val newState = Command.process(s"project $projectArg", initialState, _ => ())
       (newState, s"$projectArg/")
@@ -61,14 +67,15 @@ object BatchWatch {
 
     val newExtracted = Project.extract(state)
     val batchWindow = newExtracted.getOpt(RevolverPlugin.autoImport.reBatchWindow).getOrElse(3.seconds)
-    val baseDir = newExtracted.getOpt(baseDirectory).getOrElse(file("."))
 
     log.info(s"[CYAN]Starting batched watch mode (window: ${batchWindow.toSeconds}s)")
     if (projectArg.nonEmpty) log.info(s"[CYAN]Project: $projectArg")
+    log.info(s"[CYAN]Watching: $buildRoot")
     log.info("[CYAN]Press 'q' + Enter to stop")
     println()
 
-    val watcher = new FileWatcher(baseDir, log)
+    // Watch from build root to catch all module changes
+    val watcher = new FileWatcher(buildRoot, log)
     val reStartCmd = s"${projectPrefix}reStart"
     var currentState = Command.process(reStartCmd, state, _ => ())
 
@@ -129,9 +136,31 @@ object BatchWatch {
     private val watchService = FileSystems.getDefault.newWatchService()
     private val registeredDirs = mutable.Set[Path]()
 
-    // Register source directories and start watch thread
-    SourcePaths.map(baseDir / _).filter(_.exists()).foreach(registerDirectory)
+    // Find and register all source directories recursively (handles multi-module builds)
+    findSourceDirectories(baseDir).foreach(registerDirectory)
     startWatchThread()
+
+    private def findSourceDirectories(root: File): Seq[File] = {
+      val sourcePatterns = SourcePaths.map(_.split("/").toList)
+
+      def findMatching(dir: File, depth: Int): Seq[File] = {
+        if (!dir.isDirectory) return Seq.empty
+
+        val matchedSources = sourcePatterns.flatMap { pattern =>
+          val candidate = pattern.foldLeft(dir)(_ / _)
+          if (candidate.exists() && candidate.isDirectory) Some(candidate) else None
+        }
+
+        val subdirs = Option(dir.listFiles())
+          .getOrElse(Array.empty)
+          .filter(f => f.isDirectory && !f.getName.startsWith(".") && f.getName != "target")
+          .flatMap(subdir => findMatching(subdir, depth + 1))
+
+        matchedSources ++ subdirs
+      }
+
+      findMatching(root, 0).distinct
+    }
 
     def isRunning: Boolean = running.get()
     def stop(): Unit = running.set(false)
