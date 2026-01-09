@@ -1,4 +1,4 @@
-package spray.revolver
+package io.conduktor.revolver
 
 import sbt.ProjectRef
 import java.util.concurrent.atomic.AtomicReference

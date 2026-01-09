@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package spray.revolver
+package io.conduktor.revolver
 
 import sbt.Keys._
 import sbt.{Fork, ForkOptions, LoggedOutput, Logger, Path, ProjectRef, State, complete}

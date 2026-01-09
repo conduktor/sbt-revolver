@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package spray.revolver
+package io.conduktor.revolver
 
 import java.lang.{Runtime => JRuntime}
 import sbt.{Logger, ProjectRef}
