@@ -17,3 +17,4 @@ scalacOptions := Seq(
 scriptedLaunchOpts += s"-Dplugin.version=${version.value}"
 scriptedBufferLog := false
 Test / test := (Test / test).dependsOn(scripted.toTask("")).value
+// v1.0.2
