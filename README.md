@@ -15,7 +15,19 @@ An SBT plugin for fast development turnaround in Scala applications.
 Requires SBT 1.x. Add to `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.conduktor" % "sbt-revolver" % "0.11.0")
+addSbtPlugin("io.conduktor" % "sbt-revolver" % "1.0.2")
+```
+
+This requires access to Conduktor's GitHub Packages:
+
+```scala
+resolvers += "GitHub Packages" at "https://maven.pkg.github.com/conduktor/sbt-revolver"
+credentials += Credentials(
+  "GitHub Package Registry",
+  "maven.pkg.github.com",
+  "_",
+  sys.env.getOrElse("GITHUB_TOKEN", "")
+)
 ```
 
 sbt-revolver is an auto plugin — no additional configuration needed. In multi-module builds, disable for specific submodules with `Project(...).disablePlugins(RevolverPlugin)`.
@@ -46,6 +58,8 @@ When using tools like **Claude Code** that make multiple rapid file changes, `~r
 sbt> reStartWatch          # Watch current project
 sbt> reStartWatch app      # Watch specific project (multi-module builds)
 ```
+
+**Multi-module builds**: `reStartWatch` watches source directories across the **entire build** (not just the target project), so changes in any dependency module trigger a restart.
 
 This waits for the batch window (default: 3s) after the **last** file change before restarting.
 
@@ -100,6 +114,21 @@ reColors := Revolver.noColors
 // Longer batch window for slow tools
 reBatchWindow := 10.seconds
 ```
+
+### Multi-Module Build Setup
+
+In multi-module builds where you run `reStartWatch app`, configure the working directory so relative paths (like config files) resolve from the project root:
+
+```scala
+lazy val app = project
+  .settings(
+    // Both run and reStart should use project root as working directory
+    run / baseDirectory     := (LocalRootProject / baseDirectory).value,
+    reStart / baseDirectory := (LocalRootProject / baseDirectory).value,
+  )
+```
+
+Without this, the forked JVM's working directory is the subproject folder (`modules/app/`), causing relative paths like `config/app.yml` to fail.
 
 ## License
 
